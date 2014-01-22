@@ -4,9 +4,9 @@
 	</head>
 	<body>
 		<p>If you want to invite gurest, tell <b>http://localhost:8080/?chatkey={{.Chat_key}}</b></p>
-		<form name="mform" action="#">
-				<input type="button" value="send" onclick="submitMessage()" />
-				<input type="text" name="content" size="60" />
+		<form name="mform" onsubmit="false">
+				<input type="button" value="send" onclick="submitMessage()"/>
+				<input type="text" name="content" size="60" onkeydown="isEnter()"/>
 		</form>
 		<hr />
 		<!--
@@ -19,6 +19,12 @@
 		<div name="field", id="field"></div>
 		<script type="text/javascript">
 			state = {{.}};
+
+			isEnter = function() {
+				if (window.event.keyCode==13) {
+					submitMessage();
+				}
+			}
 
 			function updateField(messages) {
 				var field;
