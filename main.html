@@ -1,0 +1,82 @@
+<html>
+	<head>
+		<script type="text/javascript" src="/_ah/channel/jsapi"></script>
+	</head>
+	<body>
+		<p>If you want to invite gurest, tell <b>http://localhost:8080/?chatkey={{.Chat_key}}</b></p>
+		<form name="mform" action="#">
+				<input type="button" value="send" onclick="submitMessage()" />
+				<input type="text" name="content" size="60" />
+		</form>
+		<hr />
+		<!--
+		{{range .Messages}}
+		<p><b>{{.Name}}:</b></p>
+		<pre>{{.Content}}</pre>
+		<p>{{.Date}}</p>
+		{{end}}
+		-->
+		<div name="field", id="field"></div>
+		<script type="text/javascript">
+			state = {{.}};
+
+			function updateField(messages) {
+				var field;
+				field = document.getElementById("field");
+				field.innerHTML = "";
+				console.log("messages: " + messages);
+				for (var i = 0; i < messages.length; i++) {
+					field.innerHTML += "<p><b>" + messages[i].Name + ":</b></p>";
+					field.innerHTML += "<p>" + messages[i].Content + "</p>";
+					field.innerHTML += "<p>" + messages[i].Date + "</p>";
+					field.innerHTML += "<hr />\n"
+				}
+			};
+
+			sendMessage = function(path, opt_param) {
+				console.log("called sendMessage");
+				path += '?chatkey=' + state.Chat_key;
+				if (opt_param) {
+					path += '&' + opt_param;
+				}
+				var xhr = new XMLHttpRequest();
+				xhr.open('POST', path, true);
+				xhr.send();
+			};
+
+			// クライアントが準備完了した時に呼ぶ
+			onOpened = function() {
+				connected = true;
+				sendMessage('opened');
+				updateField(state.Messages);
+			};
+
+			// メッセージの送信時に呼ぶ
+			function submitMessage() {
+				console.log("called submitMessage");
+				sendMessage('/submit', 'msg=' + document.mform.content.value);
+			}
+
+			// サーバからのメッセージを処理するために呼ぶ
+			onMessage = function(msg) {
+				console.log("called onMessage");
+				var raw_data = JSON.parse(msg.data);
+				console.log(raw_data);
+				updateField(raw_data.Messages);
+			};
+
+			onError = function() {
+			};
+
+			onClose = function() {
+			};
+
+			channel = new goog.appengine.Channel('{{.Token}}');
+			socket = channel.open();
+			socket.onopen = onOpened;
+			socket.onmessage = onMessage;
+			socket.onerror = onError;
+			socket.onclose = onClose;
+		</script>
+	</body>
+</html>
