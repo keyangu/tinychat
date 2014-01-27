@@ -30,23 +30,28 @@ type Display struct {
 	Messages   []Statement
 }
 
-
 var mainTemplate = template.Must(template.ParseFiles("main.html"))
 
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
-func init() {
-	http.HandleFunc("/", main)
-	http.HandleFunc("/submit", submit)
-}
-
-func tinychatKey(c appengine.Context) *datastore.Key {
-	return datastore.NewKey(c, "TinyChat", "default_tinychat", 0, nil)
+func tinychatKey(c appengine.Context, key string) *datastore.Key {
+	// func NewKey(c appengine.Context, kind, stringID string, intID int64, parent *Key) *Key
+	if key == "" {
+		return datastore.NewKey(c, "TinyChat", "default_tinychat", 0, nil)
+	} else {
+		return datastore.NewKey(c, "TinyChat", key, 0, nil)
+	}
 }
 
 func memberKey(c appengine.Context) *datastore.Key {
 	return datastore.NewKey(c, "Member", "default_member", 0, nil)
+}
+
+///////////////////////////////////////////////////////////
+func init() {
+	http.HandleFunc("/", main)
+	http.HandleFunc("/submit", submit)
 }
 
 func main(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +77,7 @@ func main(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 発言内容を20件取得
-	q := datastore.NewQuery("message").Ancestor(tinychatKey(c)).Order("-Date").Limit(20)
+	q := datastore.NewQuery("message").Ancestor(tinychatKey(c, tkey)).Order("-Date").Limit(20)
 	messages := make([]Statement, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -142,7 +147,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("key: %v, msg: %v\n", key, stm.Content);
 
-	stmkey := datastore.NewIncompleteKey(c, "message", tinychatKey(c))
+	stmkey := datastore.NewIncompleteKey(c, "message", tinychatKey(c, key))
 	_, err := datastore.Put(c, stmkey, &stm)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -160,7 +165,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 	log.Printf("member: %v\n", members);
 
 	// 発言内容を20件取得
-	q = datastore.NewQuery("message").Ancestor(tinychatKey(c)).Order("-Date").Limit(20)
+	q = datastore.NewQuery("message").Ancestor(tinychatKey(c, key)).Order("-Date").Limit(20)
 	messages := make([]Statement, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

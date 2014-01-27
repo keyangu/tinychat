@@ -6,7 +6,7 @@
 		<p>If you want to invite gurest, tell <b>http://localhost:8080/?chatkey={{.Chat_key}}</b></p>
 		<form name="mform" onsubmit="false">
 				<input type="button" value="send" onclick="submitMessage()"/>
-				<input type="text" name="content" size="60" onkeydown="isEnter()"/>
+				<input type="text" name="content" id="message" size="60" onkeydown="return isEnter(event);"/>
 		</form>
 		<hr />
 		<!--
@@ -20,9 +20,11 @@
 		<script type="text/javascript">
 			state = {{.}};
 
-			isEnter = function() {
-				if (window.event.keyCode==13) {
+			isEnter = function(e) {
+				if (!e) var e = window.event;
+				if (e.keyCode==13) {
 					submitMessage();
+					return false;
 				}
 			}
 
@@ -60,7 +62,11 @@
 			// メッセージの送信時に呼ぶ
 			function submitMessage() {
 				console.log("called submitMessage");
+				// サーバにメッセージ送信
 				sendMessage('/submit', 'msg=' + document.mform.content.value);
+				// 入力内容をクリア
+				var mes = document.getElementById("message");
+				mes.value = "";
 			}
 
 			// サーバからのメッセージを処理するために呼ぶ
