@@ -5,29 +5,29 @@ import (
 	"net/http"
 
 	"appengine"
-	"appengine/datastore"
 	"appengine/channel"
+	"appengine/datastore"
 	"appengine/user"
 	"time"
 
-	"log"
+	//"log"
 )
 
-type Statement struct {
-	Date       time.Time
-	Name       string
-	Content    string
+type Message struct {
+	Date    time.Time
+	Name    string
+	Content string
 }
 
 type Member struct {
-	ID        string
+	ID string
 }
 
 type Display struct {
-	Token      string
-	Me         string
-	Chat_key   string
-	Messages   []Statement
+	Token    string
+	Me       string
+	Chat_key string
+	Messages []Message
 }
 
 var mainTemplate = template.Must(template.ParseFiles("main.html"))
@@ -35,6 +35,7 @@ var mainTemplate = template.Must(template.ParseFiles("main.html"))
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
+// chat部屋に相当するAncestorKeyを返す
 func tinychatKey(c appengine.Context, key string) *datastore.Key {
 	// func NewKey(c appengine.Context, kind, stringID string, intID int64, parent *Key) *Key
 	if key == "" {
@@ -44,8 +45,13 @@ func tinychatKey(c appengine.Context, key string) *datastore.Key {
 	}
 }
 
-func memberKey(c appengine.Context) *datastore.Key {
-	return datastore.NewKey(c, "Member", "default_member", 0, nil)
+// chat部屋にいるメンバリストに相当するAncestorKeyを返す
+func memberKey(c appengine.Context, key string) *datastore.Key {
+	if key == "" {
+		return datastore.NewKey(c, "Member", "default_member", 0, nil)
+	} else {
+		return datastore.NewKey(c, "Member", key, 0, nil)
+	}
 }
 
 ///////////////////////////////////////////////////////////
@@ -60,15 +66,14 @@ func main(w http.ResponseWriter, r *http.Request) {
 	u := user.Current(c) // assumes 'login: required' set in app.yaml
 
 	tkey := r.FormValue("chatkey")
-	// もし、だれもログインしていなければ、chatkeyを
-	// 最初にログインしたユーザのIDとする
+	// chatkeyのクエリが空でここに来た場合、chatkeyを
+	// このユーザのIDとする(=新しいchat部屋を作る)
 	if tkey == "" {
 		tkey = u.ID
 	}
 
-	log.Println("hoge")
-
 	// channel を uID+tkeyで作る
+	// どのチャット部屋のどのユーザかが決まる
 	tok, err := channel.Create(c, u.ID+tkey)
 	if err != nil {
 		http.Error(w, "Couldn't create Channel", http.StatusInternalServerError)
@@ -76,36 +81,30 @@ func main(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 現在のチャット部屋の最新の
 	// 発言内容を20件取得
 	q := datastore.NewQuery("message").Ancestor(tinychatKey(c, tkey)).Order("-Date").Limit(20)
-	messages := make([]Statement, 0, 20)
+	messages := make([]Message, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Println("piyo")
-
-	// u.IDで参加者リストを検索
-	q = datastore.NewQuery("Member").Ancestor(memberKey(c)).
-			Filter("ID =", u.ID)
+	// u.IDで部屋の参加者リストに自分がいるかを検索
+	q = datastore.NewQuery("Member").Ancestor(memberKey(c, tkey)).
+		Filter("ID =", u.ID)
 	members := make([]Member, 0, 1)
-
-	log.Println("fuga")
-
 	if _, err := q.GetAll(c, &members); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	m := Member{
-		ID: u.ID,
-	}
-	log.Printf("morua: %v, %v", members, m)
-
-	// 見つからなければ追加
+	// 見つからなければ自分をメンバリストに追加
 	if len(members) == 0 {
-		key := datastore.NewIncompleteKey(c, "Member", memberKey(c))
+		m := Member{
+			ID: u.ID,
+		}
+		key := datastore.NewIncompleteKey(c, "Member", memberKey(c, tkey))
 		_, err := datastore.Put(c, key, &m)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -113,13 +112,12 @@ func main(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Println("moga")
-
-	d := Display {
-		Token:		tok,
-		Me:			u.ID,
-		Chat_key:	tkey,
-		Messages:	messages,
+	// HTML出力のための準備
+	d := Display{
+		Token:    tok,
+		Me:       u.ID,
+		Chat_key: tkey,
+		Messages: messages,
 	}
 
 	err = mainTemplate.Execute(w, d)
@@ -129,65 +127,64 @@ func main(w http.ResponseWriter, r *http.Request) {
 }
 
 // 発言時の処理
-// /submit?chatkey=(chatkey)[&msg=(msg)] というクエリでくる
+// Javascriptのクライアントから
+// /submit?chatkey=(chatkey)[&msg=(msg)] というクエリでリクエストがくる
+// msgの内容をデータストアに保存し、発言内容リストをchannelを経由して
+// 部屋にいるすべてのJavascriptクライアントにSendJSONする
 func submit(w http.ResponseWriter, r *http.Request) {
-
-	log.Println("submit is called");
 
 	c := appengine.NewContext(r)
 	u := user.Current(c)
-	key := r.FormValue("chatkey")
+	tkey := r.FormValue("chatkey")
 
 	// 発言内容をデータストアに保存する
-	stm := Statement {
-		Date:		time.Now(),
-		Name:		u.String(),
-		Content:	r.FormValue("msg"),
+	stm := Message{
+		Date:    time.Now(),
+		Name:    u.String(),
+		Content: r.FormValue("msg"),
 	}
 
-	log.Printf("key: %v, msg: %v\n", key, stm.Content);
+	log.Printf("tkey: %v, msg: %v\n", tkey, stm.Content)
 
-	stmkey := datastore.NewIncompleteKey(c, "message", tinychatKey(c, key))
+	// データストアへ発言内容をPut
+	stmkey := datastore.NewIncompleteKey(c, "message", tinychatKey(c, tkey))
 	_, err := datastore.Put(c, stmkey, &stm)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// データストアから現在のユーザ全員を取得する
-	q := datastore.NewQuery("Member").Ancestor(memberKey(c))
+	// データストアから現在の部屋にいるユーザ全員を取得する
+	q := datastore.NewQuery("Member").Ancestor(memberKey(c, tkey))
 	members := make([]Member, 0, 20)
 	if _, err := q.GetAll(c, &members); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("member: %v\n", members);
+	log.Printf("member: %v\n", members)
 
 	// 発言内容を20件取得
-	q = datastore.NewQuery("message").Ancestor(tinychatKey(c, key)).Order("-Date").Limit(20)
-	messages := make([]Statement, 0, 20)
+	q = datastore.NewQuery("message").Ancestor(tinychatKey(c, tkey)).Order("-Date").Limit(20)
+	messages := make([]Message, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	d := Display {
-		Token:		"",
-		Me:			u.ID,
-		Chat_key:	key,
-		Messages:	messages,
-	}
-
 	// すべてのユーザに対してSendJSONする
+	d := Display{
+		Token:    "",
+		Me:       u.ID,
+		Chat_key: tkey,
+		Messages: messages,
+	}
 	for _, member := range members {
-		err := channel.SendJSON(c, member.ID+key, d)
+		err := channel.SendJSON(c, member.ID+tkey, d)
 		if err != nil {
 			c.Errorf("sending data: %v", err)
 		}
 	}
 
-	log.Println("submit function end")
-
+	//log.Printf("hello")
 }
-

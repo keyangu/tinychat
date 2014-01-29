@@ -9,17 +9,13 @@
 				<input type="text" name="content" id="message" size="60" onkeydown="return isEnter(event);"/>
 		</form>
 		<hr />
-		<!--
-		{{range .Messages}}
-		<p><b>{{.Name}}:</b></p>
-		<pre>{{.Content}}</pre>
-		<p>{{.Date}}</p>
-		{{end}}
-		-->
 		<div name="field", id="field"></div>
 		<script type="text/javascript">
+			// stateにDisplayオブジェクトそのものを入れる
 			state = {{.}};
 
+			// inputフィールドでEnterを押した時に自動で
+			// Submitされないようにする
 			isEnter = function(e) {
 				if (!e) var e = window.event;
 				if (e.keyCode==13) {
@@ -28,7 +24,9 @@
 				}
 			}
 
-			function updateField(messages) {
+			// サーバからSendJSONされた時に呼ばれる
+			// id="field"のdivブロックに発言内容を描画する
+			updateField = function(messages) {
 				var field;
 				field = document.getElementById("field");
 				field.innerHTML = "";
@@ -41,6 +39,8 @@
 				}
 			};
 
+			// XMLHttpRequestラッパー
+			// サーバにリクエストを送る
 			sendMessage = function(path, opt_param) {
 				console.log("called sendMessage");
 				path += '?chatkey=' + state.Chat_key;
@@ -52,7 +52,7 @@
 				xhr.send();
 			};
 
-			// クライアントが準備完了した時に呼ぶ
+			// クライアントが準備完了した時に呼ばれる
 			onOpened = function() {
 				connected = true;
 				sendMessage('opened');
@@ -78,11 +78,17 @@
 			};
 
 			onError = function() {
+				// TODO
 			};
 
 			onClose = function() {
+				// TODO
+				// 退出関連の処理を書くといいかも
 			};
 
+			// 発行されたトークン(uID+chatkey)
+			// を使ってチャンネルを生成し、
+			// ソケットに必要なコールバックを登録する
 			channel = new goog.appengine.Channel('{{.Token}}');
 			socket = channel.open();
 			socket.onopen = onOpened;
