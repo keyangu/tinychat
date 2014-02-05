@@ -35,7 +35,7 @@ var mainTemplate = template.Must(template.ParseFiles("main.html"))
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////
-// chat$BIt20$KAjEv$9$k(BAncestorKey$B$rJV$9(B
+// chat部屋に相当するAncestorKeyを返す
 func tinychatKey(c appengine.Context, key string) *datastore.Key {
 	// func NewKey(c appengine.Context, kind, stringID string, intID int64, parent *Key) *Key
 	if key == "" {
@@ -45,7 +45,7 @@ func tinychatKey(c appengine.Context, key string) *datastore.Key {
 	}
 }
 
-// chat$BIt20$K$$$k%a%s%P%j%9%H$KAjEv$9$k(BAncestorKey$B$rJV$9(B
+// chat部屋にいるメンバリストに相当するAncestorKeyを返す
 func memberKey(c appengine.Context, key string) *datastore.Key {
 	if key == "" {
 		return datastore.NewKey(c, "Member", "default_member", 0, nil)
@@ -66,14 +66,14 @@ func main(w http.ResponseWriter, r *http.Request) {
 	u := user.Current(c) // assumes 'login: required' set in app.yaml
 
 	tkey := r.FormValue("chatkey")
-	// chatkey$B$N%/%(%j$,6u$G$3$3$KMh$?>l9g!"(Bchatkey$B$r(B
-	// $B$3$N%f!<%6$N(BID$B$H$9$k(B(=$B?7$7$$(Bchat$BIt20$r:n$k(B)
+	// chatkeyのクエリが空でここに来た場合、chatkeyを
+	// このユーザのIDとする(=新しいchat部屋を作る)
 	if tkey == "" {
 		tkey = u.ID
 	}
 
-	// channel $B$r(B uID+tkey$B$G:n$k(B
-	// $B$I$N%A%c%C%HIt20$N$I$N%f!<%6$+$,7h$^$k(B
+	// channel を uID+tkeyで作る
+	// どのチャット部屋のどのユーザかが決まる
 	tok, err := channel.Create(c, u.ID+tkey)
 	if err != nil {
 		http.Error(w, "Couldn't create Channel", http.StatusInternalServerError)
@@ -81,8 +81,8 @@ func main(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// $B8=:_$N%A%c%C%HIt20$N:G?7$N(B
-	// $BH/8@FbMF$r(B20$B7o<hF@(B
+	// 現在のチャット部屋の最新の
+	// 発言内容を20件取得
 	q := datastore.NewQuery("message").Ancestor(tinychatKey(c, tkey)).Order("-Date").Limit(20)
 	messages := make([]Message, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
@@ -90,7 +90,7 @@ func main(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// u.ID$B$GIt20$N;22C<T%j%9%H$K<+J,$,$$$k$+$r8!:w(B
+	// u.IDで部屋の参加者リストに自分がいるかを検索
 	q = datastore.NewQuery("Member").Ancestor(memberKey(c, tkey)).
 		Filter("ID =", u.ID)
 	members := make([]Member, 0, 1)
@@ -99,7 +99,7 @@ func main(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// $B8+$D$+$i$J$1$l$P<+J,$r%a%s%P%j%9%H$KDI2C(B
+	// 見つからなければ自分をメンバリストに追加
 	if len(members) == 0 {
 		m := Member{
 			ID: u.ID,
@@ -112,7 +112,7 @@ func main(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// HTML$B=PNO$N$?$a$N=`Hw(B
+	// HTML出力のための準備
 	d := Display{
 		Token:    tok,
 		Me:       u.ID,
@@ -126,18 +126,18 @@ func main(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// $BH/8@;~$N=hM}(B
-// Javascript$B$N%/%i%$%"%s%H$+$i(B
-// /submit?chatkey=(chatkey)[&msg=(msg)] $B$H$$$&%/%(%j$G%j%/%(%9%H$,$/$k(B
-// msg$B$NFbMF$r%G!<%?%9%H%"$KJ]B8$7!"H/8@FbMF%j%9%H$r(Bchannel$B$r7PM3$7$F(B
-// $BIt20$K$$$k$9$Y$F$N(BJavascript$B%/%i%$%"%s%H$K(BSendJSON$B$9$k(B
+// 発言時の処理
+// Javascriptのクライアントから
+// /submit?chatkey=(chatkey)[&msg=(msg)] というクエリでリクエストがくる
+// msgの内容をデータストアに保存し、発言内容リストをchannelを経由して
+// 部屋にいるすべてのJavascriptクライアントにSendJSONする
 func submit(w http.ResponseWriter, r *http.Request) {
 
 	c := appengine.NewContext(r)
 	u := user.Current(c)
 	tkey := r.FormValue("chatkey")
 
-	// $BH/8@FbMF$r%G!<%?%9%H%"$KJ]B8$9$k(B
+	// 発言内容をデータストアに保存する
 	stm := Message{
 		Date:    time.Now(),
 		Name:    u.String(),
@@ -146,7 +146,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("tkey: %v, msg: %v\n", tkey, stm.Content)
 
-	// $B%G!<%?%9%H%"$XH/8@FbMF$r(BPut
+	// データストアへ発言内容をPut
 	stmkey := datastore.NewIncompleteKey(c, "message", tinychatKey(c, tkey))
 	_, err := datastore.Put(c, stmkey, &stm)
 	if err != nil {
@@ -154,7 +154,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// $B%G!<%?%9%H%"$+$i8=:_$NIt20$K$$$k%f!<%6A40w$r<hF@$9$k(B
+	// データストアから現在の部屋にいるユーザ全員を取得する
 	q := datastore.NewQuery("Member").Ancestor(memberKey(c, tkey))
 	members := make([]Member, 0, 20)
 	if _, err := q.GetAll(c, &members); err != nil {
@@ -164,7 +164,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("member: %v\n", members)
 
-	// $BH/8@FbMF$r(B20$B7o<hF@(B
+	// 発言内容を20件取得
 	q = datastore.NewQuery("message").Ancestor(tinychatKey(c, tkey)).Order("-Date").Limit(20)
 	messages := make([]Message, 0, 20)
 	if _, err := q.GetAll(c, &messages); err != nil {
@@ -172,7 +172,7 @@ func submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// $B$9$Y$F$N%f!<%6$KBP$7$F(BSendJSON$B$9$k(B
+	// すべてのユーザに対してSendJSONする
 	d := Display{
 		Token:    "",
 		Me:       u.ID,
