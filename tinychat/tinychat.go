@@ -10,7 +10,7 @@ import (
 	"appengine/user"
 	"time"
 
-	//"log"
+	"log"
 )
 
 type Message struct {
