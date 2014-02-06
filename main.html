@@ -11,11 +11,11 @@
 		<hr />
 		<div name="field", id="field"></div>
 		<script type="text/javascript">
-			// state$B$K(BDisplay$B%*%V%8%'%/%H$=$N$b$N$rF~$l$k(B
+			// stateにDisplayオブジェクトそのものを入れる
 			state = {{.}};
 
-			// input$B%U%#!<%k%I$G(BEnter$B$r2!$7$?;~$K<+F0$G(B
-			// Submit$B$5$l$J$$$h$&$K$9$k(B
+			// inputフィールドでEnterを押した時に自動で
+			// Submitされないようにする
 			isEnter = function(e) {
 				if (!e) var e = window.event;
 				if (e.keyCode==13) {
@@ -24,8 +24,8 @@
 				}
 			}
 
-			// $B%5!<%P$+$i(BSendJSON$B$5$l$?;~$K8F$P$l$k(B
-			// id="field"$B$N(Bdiv$B%V%m%C%/$KH/8@FbMF$rIA2h$9$k(B
+			// サーバからSendJSONされた時に呼ばれる
+			// id="field"のdivブロックに発言内容を描画する
 			updateField = function(messages) {
 				var field;
 				field = document.getElementById("field");
@@ -39,8 +39,8 @@
 				}
 			};
 
-			// XMLHttpRequest$B%i%C%Q!<(B
-			// $B%5!<%P$K%j%/%(%9%H$rAw$k(B
+			// XMLHttpRequestラッパー
+			// サーバにリクエストを送る
 			sendMessage = function(path, opt_param) {
 				console.log("called sendMessage");
 				path += '?chatkey=' + state.Chat_key;
@@ -52,24 +52,24 @@
 				xhr.send();
 			};
 
-			// $B%/%i%$%"%s%H$,=`Hw40N;$7$?;~$K8F$P$l$k(B
+			// クライアントが準備完了した時に呼ばれる
 			onOpened = function() {
 				connected = true;
 				sendMessage('opened');
 				updateField(state.Messages);
 			};
 
-			// $B%a%C%;!<%8$NAw?.;~$K8F$V(B
+			// メッセージの送信時に呼ぶ
 			function submitMessage() {
 				console.log("called submitMessage");
-				// $B%5!<%P$K%a%C%;!<%8Aw?.(B
+				// サーバにメッセージ送信
 				sendMessage('/submit', 'msg=' + document.mform.content.value);
-				// $BF~NOFbMF$r%/%j%"(B
+				// 入力内容をクリア
 				var mes = document.getElementById("message");
 				mes.value = "";
 			}
 
-			// $B%5!<%P$+$i$N%a%C%;!<%8$r=hM}$9$k$?$a$K8F$V(B
+			// サーバからのメッセージを処理するために呼ぶ
 			onMessage = function(msg) {
 				console.log("called onMessage");
 				var raw_data = JSON.parse(msg.data);
@@ -83,12 +83,12 @@
 
 			onClose = function() {
 				// TODO
-				// $BB`=P4XO"$N=hM}$r=q$/$H$$$$$+$b(B
+				// 退出関連の処理を書くといいかも
 			};
 
-			// $BH/9T$5$l$?%H!<%/%s(B(uID+chatkey)
-			// $B$r;H$C$F%A%c%s%M%k$r@8@.$7!"(B
-			// $B%=%1%C%H$KI,MW$J%3!<%k%P%C%/$rEPO?$9$k(B
+			// 発行されたトークン(uID+chatkey)
+			// を使ってチャンネルを生成し、
+			// ソケットに必要なコールバックを登録する
 			channel = new goog.appengine.Channel('{{.Token}}');
 			socket = channel.open();
 			socket.onopen = onOpened;
